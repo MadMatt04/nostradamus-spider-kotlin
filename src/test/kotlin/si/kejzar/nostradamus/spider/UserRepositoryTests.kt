@@ -22,11 +22,21 @@ class UserRepositoryTests : CassandraTests() {
         assertEquals("Matija", user.name)
         assertEquals("mm04", user.userName)
         assertEquals("madmatt04@gmail.com", user.emailAddress)
-        assertNotNull(user.id);
+        assertNotNull(user.id)
 
         val savedUser = userRepository.insert(user).block()
         assertNotNull(savedUser)
         assertEquals(user, savedUser)
 	}
+
+    @Test
+    fun saveAndLoadUser() {
+        val user = User(name = "MatijaL", userName = "mm04L", emailAddress = "madmatt0L4@gmail.com")
+        val savedUser : User = userRepository.insert(user).block()!!
+        assertEquals(user, savedUser)
+
+        val loadedUser = userRepository.findById(savedUser.id).block()
+        assertEquals(savedUser, loadedUser)
+    }
 
 }
