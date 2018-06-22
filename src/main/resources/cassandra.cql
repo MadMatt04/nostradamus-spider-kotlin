@@ -20,6 +20,12 @@ CREATE KEYSPACE IF NOT EXISTS nostradamus
                 high_score_max_pts int
            );
 
-           CREATE INDEX si_tournament_ui
+           CREATE INDEX IF NOT EXISTS si_tournament_ui
               ON tournament (users_imported);
 
+
+            CREATE TABLE IF NOT EXISTS tournament_user (
+                tournament_id uuid,
+                user_id uuid,
+                PRIMARY KEY (tournament_id, user_id)
+            );
