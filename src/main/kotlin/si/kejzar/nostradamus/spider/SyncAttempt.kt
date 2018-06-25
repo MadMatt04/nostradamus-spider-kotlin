@@ -1,0 +1,22 @@
+package si.kejzar.nostradamus.spider
+
+import org.springframework.data.cassandra.core.mapping.Column
+import org.springframework.data.cassandra.core.mapping.PrimaryKey
+import org.springframework.data.cassandra.core.mapping.Table
+import java.time.ZonedDateTime
+import java.util.*
+
+/**
+ * @author matijak
+ * @since 22/06/2018
+ */
+@Table("sync_attempt")
+data class SyncAttempt(
+        @PrimaryKey var id: UUID = UUID.randomUUID(),
+        @Column("tournament_id") var tournamentId : UUID,
+        @Column("attempt_number") var attemptNumber: Int,
+        @Column("attempt_time") var attemptTime: ZonedDateTime,
+        @Column("parse_hash") var parseHash: Int,
+        @Column("match_number_after") var matchNumberAfter: Int,
+        var status: AttemptStatus
+)
