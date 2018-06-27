@@ -14,9 +14,9 @@ import java.util.*
 data class SyncAttempt(
         @PrimaryKey var id: UUID = UUID.randomUUID(),
         @Column("tournament_id") var tournamentId : UUID,
-        @Column("attempt_number") var attemptNumber: Int,
-        @Column("attempt_time") var attemptTime: ZonedDateTime,
-        @Column("parse_hash") var parseHash: Int,
-        @Column("match_number_after") var matchNumberAfter: Int,
-        var status: AttemptStatus
+        @Column("attempt_number") var attemptNumber: Int = 0,
+        @Column("attempt_time") var attemptTime: ZonedDateTime = ZonedDateTime.now(),
+        @Column("parse_hash") var parseHash: Int = 0,
+        @Column("match_number_after") var matchNumberAfter: Int = 0,
+        var status: AttemptStatus = AttemptStatus.SUCCESSFUL
 )
