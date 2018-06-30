@@ -50,7 +50,7 @@ class NostradamusCrawler(
         val reqTime = ZonedDateTime.now()
 
         var syncAttempt = SyncAttempt(
-                tournamentId = tournamentId,
+                syncKey = SyncKey(tournamentId = tournamentId),
                 attemptTime = ZonedDateTime.now()
         )
 
@@ -61,17 +61,17 @@ class NostradamusCrawler(
 
         tournamentRepository.findById(tournamentId)
                 .flatMap{ t : Tournament ->
-                    syncAttemptRepository.findFirstByTournamentIdOrderByAttemptNumber(t.id)
-                            .switchIfEmpty(Mono.just(SyncAttempt(tournamentId = t.id, attemptTime = ZonedDateTime.now().withYear(1970))))
+                    syncAttemptRepository.findFirstBySyncKey_TournamentIdOrderBySyncKey_AttemptNumberDesc(t.id)
+                            .switchIfEmpty(Mono.just(syncAttempt))
                             .map {
                                 lastSync ->
                                 Tuples.of(t, lastSync!!)
                             }
                 }
                 .doOnNext { tt ->
-                    syncAttempt.tournamentId = tt.t1.id
-                    syncAttempt.matchNumberAfter = tt.t1.currentMatch - 1
-                    syncAttempt.attemptNumber = tt.t2.attemptNumber + 1
+                    syncAttempt.syncKey.tournamentId = tt.t1.id
+                    syncAttempt.matchNumberAfter = tt.t1.currentMatch + 1
+                    syncAttempt.syncKey.attemptNumber = tt.t2.syncKey.attemptNumber + 1
                 }
                 .flatMapMany { t ->
                     Flux.range(0, pages)
@@ -113,7 +113,7 @@ class NostradamusCrawler(
 //                            .collectList()
 
 
-                    usersToFind.map { user ->
+                    usersToFind.subscribe { user ->
 
                         logger.info("Looking for user {}, page {}..", user.userName, contentTuple.t2)
                         val regex = regexForUser(user)

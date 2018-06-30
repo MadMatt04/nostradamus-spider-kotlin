@@ -31,17 +31,17 @@ CREATE KEYSPACE IF NOT EXISTS nostradamus
             );
 
             CREATE TABLE IF NOT EXISTS sync_attempt (
-                id uuid PRIMARY KEY,
+                id uuid,
                 tournament_id uuid,
                 attempt_number int,
                 attempt_time timestamp,
                 parse_hash int,
                 match_number_after int,
-                status text
+                status text,
+                PRIMARY KEY (tournament_id, attempt_number, id)
             );
 
-            CREATE INDEX IF NOT EXISTS si_sync_attempt_an ON sync_attempt (attempt_number);
-            CREATE INDEX IF NOT EXISTS si_sync_attempt_ti ON sync_attempt (tournament_id);
+
 
             CREATE TABLE IF NOT EXISTS points (
                 id uuid,
