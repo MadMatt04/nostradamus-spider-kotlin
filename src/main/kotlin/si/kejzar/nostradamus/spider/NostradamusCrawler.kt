@@ -13,7 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.util.function.Tuples
-import java.time.ZonedDateTime
+import java.time.LocalDateTime
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
@@ -31,7 +31,8 @@ class NostradamusCrawler(
         @Autowired val tournamentUserRepository: TournamentUserRepository,
         @Autowired val userRepository: UserRepository,
         @Autowired val syncAttemptRepository: SyncAttemptRepository,
-        @Autowired val tournamentRepository: TournamentRepository
+        @Autowired val tournamentRepository: TournamentRepository,
+        @Autowired val pointsRepository: PointsRepository
 ) {
     private val logger: Logger = LoggerFactory.getLogger(NostradamusCrawler::class.java)
     // TODO move this to DB
@@ -47,17 +48,17 @@ class NostradamusCrawler(
         val hashFunction = Hashing.crc32()
         val hasher = hashFunction.newHasher()
 
-        val reqTime = ZonedDateTime.now()
-
         var syncAttempt = SyncAttempt(
                 syncKey = SyncKey(tournamentId = tournamentId),
-                attemptTime = ZonedDateTime.now()
+                attemptTime = LocalDateTime.now()
         )
 
         val usersToFind = tournamentUserRepository.findByTournamentUserKey_TournamentId(tournamentId)
                 .map { tu -> tu.tournamentUserKey.userId }
                 .flatMap { userId -> userRepository.findById(userId) }
 //                .collectList()
+
+        val latestSuccesfulAtt = syncAttemptRepository.findFirstBySyncKey_TournamentIdAndStatusOrderBySyncKey_AttemptNumberDesc(tournamentId, AttemptStatus.SUCCESSFUL)
 
         tournamentRepository.findById(tournamentId)
                 .flatMap{ t : Tournament ->
@@ -73,9 +74,16 @@ class NostradamusCrawler(
                     syncAttempt.matchNumberAfter = tt.t1.currentMatch + 1
                     syncAttempt.syncKey.attemptNumber = tt.t2.syncKey.attemptNumber + 1
                 }
-                .flatMapMany { t ->
+                .flatMap { tt ->
+                    syncAttemptRepository.insert(syncAttempt)
+                            .map { sa2 ->
+                                syncAttempt = sa2
+                                Tuples.of(tt.t1, tt.t2, sa2)
+                            }
+                }
+                .flatMapMany { tuple ->
                     Flux.range(0, pages)
-                            .map { pageNum -> Tuples.of(t, pageNum) }
+                            .map { pageNum -> Tuples.of(tuple.t1, pageNum) }
                 }
                 .map { pageNumTuple ->
                     Tuples.of(pageNumTuple.t1, pageNumTuple.t2, webClient.get().uri { uri ->
@@ -97,7 +105,7 @@ class NostradamusCrawler(
 //                }
                 .flatMap { tuple -> tuple.t3.bodyToMono(String::class.java).map { s -> Tuples.of(tuple.t1, tuple.t2, s) } }
                 .doOnNext { tuple -> logger.info("Read page {}", tuple.t2) }
-                .subscribe { contentTuple ->
+                .flatMap { contentTuple ->
                     val content = contentTuple.t3
                     if (contentTuple.t2 == 0) {
                         val m = leaderPattern.matcher(content)
@@ -113,23 +121,71 @@ class NostradamusCrawler(
 //                            .collectList()
 
 
-                    usersToFind.subscribe { user ->
+                    usersToFind.map { user ->
 
                         logger.info("Looking for user {}, page {}..", user.userName, contentTuple.t2)
                         val regex = regexForUser(user)
+                        val points = Points(pointsKey = PointsKey(tournamentId = tournamentId, userId = user.id, syncId = syncAttempt.syncKey.id))
                         val m = regex.matcher(content)
                         if (m.find()) {
                             val ranking = Integer.parseInt(m.group(1))
                             val score = Integer.parseInt(m.group(2))
+                            points.total = score
+                            points.pointsKey.position = ranking
                             logger.info("FOUND {}, pts: $score, ranking: $ranking", user.userName)
-                        } else {
-                            logger.info("{} not found, page {}", user.userName, user.userName)
                         }
 
-
-
+                        points
                     }
+                            .filter{points -> !points.isEmpty()}
+
                 }
+                .flatMap { points ->
+                    latestSuccesfulAtt.flatMap {
+                        lsa ->
+                        if (lsa == null) {
+                            return@flatMap Mono.just(Tuples.of(points, 0))
+                        }
+                        pointsRepository.findByPointsKey_TournamentIdAndPointsKey_SyncIdAndPointsKey_UserId(
+                                points.pointsKey.tournamentId,
+                                lsa.syncKey.id,
+                                points.pointsKey.userId
+                        )
+                                .map { prevPoints ->
+                                    if (prevPoints != null) {
+                                        points.positionChange = points.pointsKey.position - prevPoints.pointsKey.position
+                                        points.change = points.total - prevPoints.total
+                                    }
+
+                                    Tuples.of(points, lsa.parseHash)
+                                }
+                    }
+
+                }
+                .doOnNext { ptsTuple ->
+                    val points = ptsTuple.t1
+                    if (points.isEmpty()) {
+                        points.percentage = 0.0
+                        points.positionChange = 0
+                        points.change = 0
+                    } }
+                .doOnNext { ptsTuple -> hasher.putInt(ptsTuple.t1.valueHash()) }
+                .collectList()
+                .flatMapMany {
+                    list ->
+                    if (list.isEmpty() || list[0].t2 == hasher.hash().hashCode()) {
+                        return@flatMapMany Flux.empty<Points>()
+                    }
+
+                    Flux.fromIterable(list)
+                            .map { tuple -> tuple.t1 }
+                }
+                .flatMap { points -> pointsRepository.insert(points) }
+                .subscribe { points ->
+                    logger.info("Saved points {}", points)
+                }
+
+
 
 
     }

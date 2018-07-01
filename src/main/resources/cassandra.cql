@@ -41,21 +41,23 @@ CREATE KEYSPACE IF NOT EXISTS nostradamus
                 PRIMARY KEY (tournament_id, attempt_number, id)
             );
 
+            CREATE INDEX IF NOT EXISTS si_sync_attempt_status ON sync_attempt (status);
+
 
 
             CREATE TABLE IF NOT EXISTS points (
                 id uuid,
                 user_id uuid,
                 sync_id uuid,
+                tournament_id uuid,
                 total int,
                 change int,
                 matches int,
                 position int,
                 position_change int,
                 percentage double,
-                PRIMARY KEY (id, user_id, sync_id)
+                PRIMARY KEY (tournament_id, sync_id, position, user_id, id)
             );
 
-            CREATE INDEX IF NOT EXISTS si_points_si_position ON points (position);
             CREATE INDEX IF NOT EXISTS si_points_si_total ON points (total);
 

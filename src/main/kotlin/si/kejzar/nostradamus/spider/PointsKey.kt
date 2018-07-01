@@ -12,7 +12,9 @@ import java.util.*
  */
 @PrimaryKeyClass
 data class PointsKey(
+        @PrimaryKeyColumn(value = "tournament_id", type = PrimaryKeyType.PARTITIONED) var tournamentId : UUID,
         @PrimaryKeyColumn var id : UUID = UUID.randomUUID(),
-        @PrimaryKeyColumn(value ="user_id", type = PrimaryKeyType.PARTITIONED) var userId: UUID,
-        @PrimaryKeyColumn("sync_id") var syncId : UUID
+        @PrimaryKeyColumn(value ="user_id") var userId: UUID,
+        @PrimaryKeyColumn("sync_id", type = PrimaryKeyType.PARTITIONED) var syncId : UUID,
+        @PrimaryKeyColumn var position : Int = -1
 )

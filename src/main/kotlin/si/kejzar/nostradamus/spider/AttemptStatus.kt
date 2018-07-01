@@ -7,6 +7,7 @@ package si.kejzar.nostradamus.spider
 enum class AttemptStatus {
 
     SUCCESSFUL,
-    FAILED
+    FAILED,
+    IN_PROGRESS
 
 }
