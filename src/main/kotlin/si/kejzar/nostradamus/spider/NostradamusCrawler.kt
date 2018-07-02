@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.util.function.Tuple2
 import reactor.util.function.Tuples
+import reactor.util.function.component2
 import java.time.LocalDateTime
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -58,11 +60,15 @@ class NostradamusCrawler(
                 .flatMap { userId -> userRepository.findById(userId) }
 //                .collectList()
 
-        val latestSuccesfulAtt = syncAttemptRepository.findFirstBySyncKey_TournamentIdAndStatusOrderBySyncKey_AttemptNumberDesc(tournamentId, AttemptStatus.SUCCESSFUL)
+        val latestSuccessfulAtt =
+                syncAttemptRepository.findFirstBySyncKey_TournamentIdAndSyncKey_StatusOrderBySyncKey_StatusDescSyncKey_AttemptNumberDesc(tournamentId, AttemptStatus.SUCCESSFUL)
+                        .switchIfEmpty(Mono.just(SyncAttempt(syncKey = SyncKey(tournamentId = tournamentId), attemptTime = LocalDateTime.MIN)))
+                        .flux()
+
 
         tournamentRepository.findById(tournamentId)
                 .flatMap{ t : Tournament ->
-                    syncAttemptRepository.findFirstBySyncKey_TournamentIdOrderBySyncKey_AttemptNumberDesc(t.id)
+                    syncAttemptRepository.findFirstBySyncKey_TournamentIdOrderBySyncKey_StatusDescSyncKey_AttemptNumberDesc(t.id)
                             .switchIfEmpty(Mono.just(syncAttempt))
                             .map {
                                 lastSync ->
@@ -140,13 +146,35 @@ class NostradamusCrawler(
                             .filter{points -> !points.isEmpty()}
 
                 }
-                .flatMap { points ->
-                    latestSuccesfulAtt.flatMap {
-                        lsa ->
-                        if (lsa == null) {
-                            return@flatMap Mono.just(Tuples.of(points, 0))
-                        }
-                        pointsRepository.findByPointsKey_TournamentIdAndPointsKey_SyncIdAndPointsKey_UserId(
+                .zipWith(latestSuccessfulAtt) // TODO only combines the one
+//                { points ->
+//
+//                    latestSuccessfulAtt.map { lsa ->
+//                        if (lsa == null) {
+//                            return@map Tuples.of(points, 0)
+//                        }
+//                        return@map pointsRepository.findByPointsKey_TournamentIdAndPointsKey_SyncIdAndPointsKey_UserId(
+//                                points.pointsKey.tournamentId,
+//                                lsa.syncKey.id,
+//                                points.pointsKey.userId
+//                        )
+//                                .map { prevPoints ->
+//                                    if (prevPoints != null) {
+//                                        points.positionChange = points.pointsKey.position - prevPoints.pointsKey.position
+//                                        points.change = points.total - prevPoints.total
+//                                    }
+//
+//                                    return@map Tuples.of(points, lsa.parseHash)
+//                                }
+//                    }
+//                }
+                .flatMap { ptsLsaTuple ->
+                    val points = ptsLsaTuple.t1
+                    if (ptsLsaTuple.t2.syncKey.status != AttemptStatus.SUCCESSFUL) {
+                        return@flatMap Mono.just(Tuples.of(points, 0))
+                    } else {
+                        val lsa = ptsLsaTuple.t2
+                        return@flatMap pointsRepository.findByPointsKey_TournamentIdAndPointsKey_SyncIdAndPointsKey_UserId(
                                 points.pointsKey.tournamentId,
                                 lsa.syncKey.id,
                                 points.pointsKey.userId
@@ -157,10 +185,9 @@ class NostradamusCrawler(
                                         points.change = points.total - prevPoints.total
                                     }
 
-                                    Tuples.of(points, lsa.parseHash)
+                                    return@map Tuples.of(points, lsa.parseHash)
                                 }
                     }
-
                 }
                 .doOnNext { ptsTuple ->
                     val points = ptsTuple.t1

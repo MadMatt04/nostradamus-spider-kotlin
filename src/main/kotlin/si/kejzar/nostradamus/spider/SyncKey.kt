@@ -14,5 +14,6 @@ import java.util.*
 data class SyncKey(
         @PrimaryKeyColumn var id : UUID = UUID.randomUUID(),
         @PrimaryKeyColumn(value ="tournament_id", type = PrimaryKeyType.PARTITIONED) var tournamentId: UUID,
-        @PrimaryKeyColumn("attempt_number") var attemptNumber : Int = 0
+        @PrimaryKeyColumn("attempt_number") var attemptNumber : Int = 0,
+        @PrimaryKeyColumn var status: AttemptStatus = AttemptStatus.IN_PROGRESS
 )

@@ -38,10 +38,8 @@ CREATE KEYSPACE IF NOT EXISTS nostradamus
                 parse_hash int,
                 match_number_after int,
                 status text,
-                PRIMARY KEY (tournament_id, attempt_number, id)
+                PRIMARY KEY (tournament_id, status, attempt_number, id)
             );
-
-            CREATE INDEX IF NOT EXISTS si_sync_attempt_status ON sync_attempt (status);
 
 
 

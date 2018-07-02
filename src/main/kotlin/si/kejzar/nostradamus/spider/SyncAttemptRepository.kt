@@ -12,9 +12,9 @@ import java.util.*
 interface SyncAttemptRepository : ReactiveCassandraRepository<SyncAttempt, UUID> {
 
 
-    fun findFirstBySyncKey_TournamentIdOrderBySyncKey_AttemptNumberDesc(tournamentId: UUID) : Mono<SyncAttempt?>
+    fun findFirstBySyncKey_TournamentIdOrderBySyncKey_StatusDescSyncKey_AttemptNumberDesc(tournamentId: UUID) : Mono<SyncAttempt?>
 
-    fun findFirstBySyncKey_TournamentIdAndStatusOrderBySyncKey_AttemptNumberDesc(tournamentId: UUID, attemptStatus: AttemptStatus) : Mono<SyncAttempt?>
+    fun findFirstBySyncKey_TournamentIdAndSyncKey_StatusOrderBySyncKey_StatusDescSyncKey_AttemptNumberDesc(tournamentId: UUID, attemptStatus: AttemptStatus) : Mono<SyncAttempt?>
 
 
 }

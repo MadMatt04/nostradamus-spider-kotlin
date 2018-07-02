@@ -16,6 +16,6 @@ data class SyncAttempt(
         @PrimaryKey var syncKey: SyncKey,
         @Column("attempt_time") var attemptTime: LocalDateTime = LocalDateTime.now(),
         @Column("parse_hash") var parseHash: Int = 0,
-        @Column("match_number_after") var matchNumberAfter: Int = 0,
-        var status: AttemptStatus = AttemptStatus.IN_PROGRESS // TODO move to index
+        @Column("match_number_after") var matchNumberAfter: Int = 0
+
 )
