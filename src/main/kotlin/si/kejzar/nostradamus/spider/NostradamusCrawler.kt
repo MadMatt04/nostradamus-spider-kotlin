@@ -47,7 +47,7 @@ class NostradamusCrawler(
 
     private val percMathContext = MathContext(3, RoundingMode.HALF_UP)
 
-    @Scheduled(fixedRate = 360000L)
+    @Scheduled(fixedRate = 90000L)
     fun crawl() {
         val webClient = WebClient.builder().baseUrl(baseUrl).build()
         val hashFunction = Hashing.crc32()
@@ -217,34 +217,36 @@ class NostradamusCrawler(
                             }
                             .map { fTuple -> Tuples.of(fTuple.t1, true) }
                             .switchIfEmpty(Flux.just(Tuples.of(points, false)))
-//                    latestSuccessfulAtt.flatMap { lsa ->
-//                        if (lsa!!.parseHash != hasher.hash().asInt()) {
-//
-//                            Mono.just(points)
-//                                    .zipWith(tournamentMono)
-//                                    .doOnNext { tTuple -> tTuple.t1.matches = tTuple.t2.currentMatch }
-//                                    .flatMap { tTuple ->
-//                                        calculatePossible.doOnNext { possiblePts ->
-//                                            tTuple.t1.percentage = (tTuple.t1.total / possiblePts).toDouble()
-//                                        }
-//                                                .map { _ -> tTuple }
-//                                    }
-//                                    .map { tTuple -> tTuple.t1 }
-//                                    .flatMap { pts -> pointsRepository.insert(pts) }
-//                                    .map { pts -> Tuples.of(pts, true) }
-//                                    .flux()
-//                        } else {
-//                            Flux.just(Tuples.of(points, false))
-//                        }
-//                    }
                 }
                 .filter { pTuple -> pTuple.t2 }
                 .map { pTuple ->
                     pTuple.t1
                 }
                 .flatMap { points -> pointsRepository.insert(points) }
-                .subscribe { points ->
+                .doOnNext { points ->
                     logger.info("Saved points {}", points)
+                }
+                .last()
+                .map { _ -> AttemptStatus.SUCCESSFUL }
+                .switchIfEmpty(Mono.just(AttemptStatus.NO_CHANGES))
+                .onErrorResume { ex ->
+                    logger.error("Exception while crawling", ex)
+                    Mono.just(AttemptStatus.FAILED)
+                }
+                .map { attemptStatus -> syncAttempt.copy(syncKey = syncAttempt.syncKey.copy(status = attemptStatus), parseHash = hasher.hash().asInt()) }
+                .flatMap { cSA -> syncAttemptRepository.save(cSA) }
+                .doOnNext { cSA -> logger.info("Updating current sync attempt: {}", cSA) }
+                .flatMap { cSA -> syncAttemptRepository.delete(syncAttempt).map { oldSA -> Tuples.of(cSA, oldSA) } }
+                .map { tuple -> tuple.t1 }
+                .subscribe { cSA ->
+
+                    if (cSA.syncKey.status == AttemptStatus.SUCCESSFUL) {
+                        tournamentMono.doOnNext { t -> t.currentMatch += 1 }
+                                .flatMap { t -> tournamentRepository.save(t) }
+                                .subscribe { t ->
+                                    logger.info("Updated tournament {} ", t)
+                                }
+                    }
                 }
 
 

@@ -54,7 +54,7 @@ CREATE KEYSPACE IF NOT EXISTS nostradamus
                 position int,
                 position_change int,
                 percentage double,
-                PRIMARY KEY (tournament_id, sync_id, position, user_id, id)
+                PRIMARY KEY (tournament_id, sync_id, user_id, position, id)
             );
 
             CREATE INDEX IF NOT EXISTS si_points_si_total ON points (total);
