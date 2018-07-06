@@ -8,6 +8,7 @@ enum class AttemptStatus {
 
     SUCCESSFUL,
     FAILED,
-    IN_PROGRESS
+    IN_PROGRESS,
+    NO_CHANGES
 
 }

@@ -13,6 +13,9 @@ import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.util.function.Tuples
+import reactor.util.function.component1
+import java.math.MathContext
+import java.math.RoundingMode
 import java.time.LocalDateTime
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -41,6 +44,8 @@ class NostradamusCrawler(
     private val leaderPattern: Pattern = Pattern.compile("<td class=\"tac\">1\\\\.</td>\\n\\\\s*\\n\\\\s*<td><a href=\"/profil/\\\\S+\">(.+)</a></td>\\n\\\\s+<td class=\"tac\">(\\\\d+)</td>")
 
     private val regexMap: MutableMap<User, Pattern> = ConcurrentHashMap()
+
+    private val percMathContext = MathContext(3, RoundingMode.HALF_UP)
 
     @Scheduled(fixedRate = 360000L)
     fun crawl() {
@@ -200,30 +205,44 @@ class NostradamusCrawler(
                             .map { tuple -> tuple.t1 }
                 }
                 .flatMap { points ->
-                    latestSuccessfulAtt.flatMap { lsa ->
-                        if (lsa!!.parseHash != hasher.hash().asInt()) {
-
-                            Mono.just(points)
-                                    .zipWith(tournamentMono)
-                                    .doOnNext { tTuple -> tTuple.t1.matches = tTuple.t2.currentMatch }
-                                    .flatMap { tTuple ->
-                                        calculatePossible.doOnNext { possiblePts ->
-                                            tTuple.t1.percentage = (tTuple.t1.total / possiblePts).toDouble()
-                                        }
-                                                .map { _ -> tTuple }
-                                    }
-                                    .map { tTuple -> tTuple.t1 }
-                                    .flatMap { pts -> pointsRepository.insert(pts) }
-                                    .map { pts -> Tuples.of(pts, true) }
-                        } else {
-                            Mono.just(Tuples.of(points, false))
-                        }
-                    }
+                    latestSuccessfulAtt.zipWith(tournamentMono)
+                            .map { ltaTour -> Tuples.of(points, ltaTour.component1()!!, ltaTour.t2) }
+                            .filter { t3 -> t3.t2.parseHash != hasher.hash().asInt() }
+                            .zipWith(calculatePossible)
+                            .map { tTuple -> Tuples.of(tTuple.t1.t1, tTuple.t1.t2, tTuple.t1.t3, tTuple.t2) }
+                            .doOnNext { fTuple -> fTuple.t1.matches = fTuple.t3.currentMatch }
+                            .doOnNext { fTuple ->
+                                val calcPos = fTuple.t4
+                                fTuple.t1.percentage = (fTuple.t1.total.toDouble() / calcPos.toDouble()).toBigDecimal(percMathContext).toDouble()
+                            }
+                            .map { fTuple -> Tuples.of(fTuple.t1, true) }
+                            .switchIfEmpty(Flux.just(Tuples.of(points, false)))
+//                    latestSuccessfulAtt.flatMap { lsa ->
+//                        if (lsa!!.parseHash != hasher.hash().asInt()) {
+//
+//                            Mono.just(points)
+//                                    .zipWith(tournamentMono)
+//                                    .doOnNext { tTuple -> tTuple.t1.matches = tTuple.t2.currentMatch }
+//                                    .flatMap { tTuple ->
+//                                        calculatePossible.doOnNext { possiblePts ->
+//                                            tTuple.t1.percentage = (tTuple.t1.total / possiblePts).toDouble()
+//                                        }
+//                                                .map { _ -> tTuple }
+//                                    }
+//                                    .map { tTuple -> tTuple.t1 }
+//                                    .flatMap { pts -> pointsRepository.insert(pts) }
+//                                    .map { pts -> Tuples.of(pts, true) }
+//                                    .flux()
+//                        } else {
+//                            Flux.just(Tuples.of(points, false))
+//                        }
+//                    }
                 }
                 .filter { pTuple -> pTuple.t2 }
                 .map { pTuple ->
                     pTuple.t1
                 }
+                .flatMap { points -> pointsRepository.insert(points) }
                 .subscribe { points ->
                     logger.info("Saved points {}", points)
                 }
